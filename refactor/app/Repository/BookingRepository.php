@@ -70,14 +70,19 @@ class BookingRepository extends BaseRepository
             $usertype = 'translator';
         }
         if ($jobs) {
-            foreach ($jobs as $jobitem) {
+            /*foreach ($jobs as $jobitem) {
                 if ($jobitem->immediate == 'yes') {
                     $emergencyJobs[] = $jobitem;
                 } else {
                     $noramlJobs[] = $jobitem;
                 }
-            }
-            $noramlJobs = collect($noramlJobs)->each(function ($item, $key) use ($user_id) {
+            }*/
+			
+			//convert foreach to collection filtering
+			$emergencyJobs = collect($jobs)->where('immediate','yes')->get()->toArray();
+			$noramlJobsCollect = collect($jobs)->where('immediate','!=','yes');
+			
+            $noramlJobs = $noramlJobsCollect->each(function ($item, $key) use ($user_id) {
                 $item['usercheck'] = Job::checkParticularJob($user_id, $item);
             })->sortBy('due')->all();
         }
@@ -89,8 +94,9 @@ class BookingRepository extends BaseRepository
      * @param $user_id
      * @return array
      */
-    public function getUsersJobsHistory($user_id, Request $request)
+    public function getUsersJobsHistory($user_id, Request $request, $perPage=15)
     {
+		//added $perPage for custom per page records
         $page = $request->get('page');
         if (isset($page)) {
             $pagenum = $page;
@@ -108,7 +114,7 @@ class BookingRepository extends BaseRepository
         } elseif ($cuser && $cuser->is('translator')) {
             $jobs_ids = Job::getTranslatorJobsHistoric($cuser->id, 'historic', $pagenum);
             $totaljobs = $jobs_ids->total();
-            $numpages = ceil($totaljobs / 15);
+            $numpages = ceil($totaljobs / $perPage);
 
             $usertype = 'translator';
 
@@ -127,20 +133,37 @@ class BookingRepository extends BaseRepository
      */
     public function store($user, $data)
     {
+		//here message field should use Localization feauture if app supports multiple language or in future in case needed
+		//so therefore message should be filled through lang file
+		/*  i.e
+		/lang
+		/en
+			messages.php
+		/es
+			messages.php
+		/sv
+			messages.php	
+		*/
+		
+		//further more Laravel Validation is not used. it should be used to code less and provide more readiblity and flexibilty
 
         $immediatetime = 5;
         $consumer_type = $user->userMeta->consumer_type;
         if ($user->user_type == env('CUSTOMER_ROLE_ID')) {
             $cuser = $user;
-
-            if (!isset($data['from_language_id'])) {
+		
+			$rules = [];
+			$messages = [];
+            /*if (!isset($data['from_language_id'])) {
                 $response['status'] = 'fail';
                 $response['message'] = "Du måste fylla in alla fält";
                 $response['field_name'] = "from_language_id";
                 return $response;
-            }
+            }*/
+			$rules += ['from_language_id'=>'required'];
+			$messages += ['from_language_id'=>'Du måste fylla in alla fält. fält namn : '.'from_language_id'];
             if ($data['immediate'] == 'no') {
-                if (isset($data['due_date']) && $data['due_date'] == '') {
+                /*if (isset($data['due_date']) && $data['due_date'] == '') {
                     $response['status'] = 'fail';
                     $response['message'] = "Du måste fylla in alla fält";
                     $response['field_name'] = "due_date";
@@ -163,14 +186,26 @@ class BookingRepository extends BaseRepository
                     $response['message'] = "Du måste fylla in alla fält";
                     $response['field_name'] = "duration";
                     return $response;
-                }
+                }*/
+				$rules += ['due_date'=>'required'];
+				$rules += ['due_time'=>'required'];
+				$rules += ['customer_phone_type'=>'nullable|required_if:customer_physical_type,==,null'];
+				$rules += ['duration'=>'required'];
+				
+				$messages += ['due_date'=>'Du måste fylla in alla fält. fält namn : '.'due_date'];
+				$messages += ['due_time'=>'Du måste fylla in alla fält. fält namn : '.'due_time'];
+				$messages += ['customer_phone_type'=>'Du måste göra ett val här. fält namn : '.'duration'];
+				$messages += ['duration'=>'Du måste fylla in alla fält. fält namn : '.'duration'];
+				
             } else {
-                if (isset($data['duration']) && $data['duration'] == '') {
+                /*if (isset($data['duration']) && $data['duration'] == '') {
                     $response['status'] = 'fail';
                     $response['message'] = "Du måste fylla in alla fält";
                     $response['field_name'] = "duration";
                     return $response;
-                }
+                }*/
+				$rules += ['duration'=>'required'];
+				$messages += ['duration'=>'Du måste fylla in alla fält. fält namn : '.'duration'];
             }
             if (isset($data['customer_phone_type'])) {
                 $data['customer_phone_type'] = 'yes';
@@ -240,6 +275,16 @@ class BookingRepository extends BaseRepository
             if (isset($due))
                 $data['will_expire_at'] = TeHelper::willExpireAt($due, $data['b_created_at']);
             $data['by_admin'] = isset($data['by_admin']) ? $data['by_admin'] : 'no';
+			
+			//make validation here
+			$validator = $this->validator($data, $rules, $messages);
+			
+			//we can also parse list of errors and send back to user but here we have send back first error only
+			if ($validator->fails()) {
+				$response['status'] = 'fail';
+                $response['message'] = $validation->errors()->first();
+                return $response;
+			}
 
             $job = $cuser->jobs()->create($data);
 
@@ -1680,13 +1725,13 @@ class BookingRepository extends BaseRepository
         return $response;
     }
 
-    public function getAll(Request $request, $limit = null)
+	//added isSuperAdmin flag and perPage attribute to get customize per page records
+    public function getAll(Request $request, $isSuperAdmin, $limit = null, $perPage=15)
     {
         $requestdata = $request->all();
-        $cuser = $request->__authenticatedUser;
-        $consumer_type = $cuser->consumer_type;
+        $consumer_type = $request->__authenticatedUser->consumer_type;
 
-        if ($cuser && $cuser->user_type == env('SUPERADMIN_ROLE_ID')) {
+        if ($isSuperAdmin) {
             $allJobs = Job::query();
 
             if (isset($requestdata['feedback']) && $requestdata['feedback'] != 'false') {
@@ -1694,7 +1739,8 @@ class BookingRepository extends BaseRepository
                 $allJobs->whereHas('feedback', function ($q) {
                     $q->where('rating', '<=', '3');
                 });
-                if (isset($requestdata['count']) && $requestdata['count'] != 'false') return ['count' => $allJobs->count()];
+				//why job count used here ? count should be at the end
+                //if (isset($requestdata['count']) && $requestdata['count'] != 'false') return ['count' => $allJobs->count()];
             }
 
             if (isset($requestdata['id']) && $requestdata['id'] != '') {
@@ -1780,11 +1826,12 @@ class BookingRepository extends BaseRepository
                 $allJobs->whereDoesntHave('user.salaries');
             }
 
-            if (isset($requestdata['count']) && $requestdata['count'] == 'true') {
+			//why job count used here ? count should be at the end
+            /*if (isset($requestdata['count']) && $requestdata['count'] == 'true') {
                 $allJobs = $allJobs->count();
 
                 return ['count' => $allJobs];
-            }
+            }*/
 
             if (isset($requestdata['consumer_type']) && $requestdata['consumer_type'] != '') {
                 $allJobs->whereHas('user.userMeta', function($q) use ($requestdata) {
@@ -1801,10 +1848,17 @@ class BookingRepository extends BaseRepository
             
             $allJobs->orderBy('created_at', 'desc');
             $allJobs->with('user', 'language', 'feedback.user', 'translatorJobRel.user', 'distance');
+			
+			//return count here if required
+			if (isset($requestdata['count']) && $requestdata['count'] == 'true') {
+                $allJobs = $allJobs->count();
+                return ['count' => $allJobs];
+            }
+			
             if ($limit == 'all')
                 $allJobs = $allJobs->get();
             else
-                $allJobs = $allJobs->paginate(15);
+                $allJobs = $allJobs->paginate($perPage);
 
         } else {
 
@@ -1825,7 +1879,8 @@ class BookingRepository extends BaseRepository
                 $allJobs->whereHas('feedback', function($q) {
                     $q->where('rating', '<=', '3');
                 });
-                if(isset($requestdata['count']) && $requestdata['count'] != 'false') return ['count' => $allJobs->count()];
+				//why job count used here ? count should be at the end
+                //if(isset($requestdata['count']) && $requestdata['count'] != 'false') return ['count' => $allJobs->count()];
             }
             
             if (isset($requestdata['lang']) && $requestdata['lang'] != '') {
@@ -1866,10 +1921,14 @@ class BookingRepository extends BaseRepository
 
             $allJobs->orderBy('created_at', 'desc');
             $allJobs->with('user', 'language', 'feedback.user', 'translatorJobRel.user', 'distance');
+			
+			//return count here if required
+			if(isset($requestdata['count']) && $requestdata['count'] != 'false') return ['count' => $allJobs->count()];
+			
             if ($limit == 'all')
                 $allJobs = $allJobs->get();
             else
-                $allJobs = $allJobs->paginate(15);
+                $allJobs = $allJobs->paginate($perPage);
 
         }
         return $allJobs;

@@ -35,7 +35,9 @@ class BookingController extends Controller
      */
     public function index(Request $request)
     {
-        if($user_id = $request->get('user_id')) {
+		//this code may throw error in certain cases 
+		//when IF and ELSE if Not exceuted then $response will throw undefined variable error.
+        /*if($user_id = $request->get('user_id')) {
 
             $response = $this->repository->getUsersJobs($user_id);
 
@@ -45,7 +47,22 @@ class BookingController extends Controller
             $response = $this->repository->getAll($request);
         }
 
-        return response($response);
+        return response($response);*/
+
+        if($user_id = $request->get('user_id')) {
+            $response = $this->repository->getUsersJobs($user_id);
+        }
+		//also check auth user and type here and pass type to function
+        elseif( isset($request->__authenticatedUser) && 
+			($request->__authenticatedUser->user_type == env('ADMIN_ROLE_ID') || $request->__authenticatedUser->user_type == env('SUPERADMIN_ROLE_ID'))){
+			$response = $this->repository->getAll($request, $request->__authenticatedUser->user_type == env('SUPERADMIN_ROLE_ID'));
+        }
+		else{
+			$response = ['error'=>'Error! User Not Found'];
+		}
+		
+		return response($response);
+		
     }
 
     /**
@@ -55,8 +72,12 @@ class BookingController extends Controller
     public function show($id)
     {
         $job = $this->repository->with('translatorJobRel.user')->find($id);
-
-        return response($job);
+		//side check if job exists
+		if($job){
+			return response($job);
+		}
+        $error = ['error'=>'Error! Job Not Found'];
+		return response($error);
     }
 
     /**
