@@ -1,45 +1,34 @@
-Choose ONE of the following tasks.
-Please do not invest more than 2-4 hours on this.
-Upload your results to a Github repo, for easier sharing and reviewing.
+Your thoughts about the code. 
 
-Thank you and good luck!
+#What makes it amazing code Or what makes it ok code.
 
+Application folder file structure and Comments are ok
 
+#what makes it terrible code.
 
-Code to refactor
-=================
-1) app/Http/Controllers/BookingController.php
-2) app/Repository/BookingRepository.php
+Code is messy
 
-Code to write tests
-=====================
-3) App/Helpers/TeHelper.php method willExpireAt
-4) App/Repository/UserRepository.php, method createOrUpdate
+All scenarios of condition statement(s) not covered that may throw error.
 
+Laravel Validation not used. it should be used to code less and provide more readiblity and flexibilty
 
-----------------------------
+Furthermore there should be intermediate layer service class (JobService) which should proccess logic part of application
+So process workflow should be
+JobController ==> JobService ==> JobRepository
+ 
+JobController (Handle controls data flow between view & service) 
+JobService (Handle business logic and communicate with repository for data saving/retrieving)
+JobRepository (Acts as abstraction layer for operations between application data (Models) and database (Tables))
 
-What I expect in your repo:
+#Thoughts on formatting, structure, logic..
 
-X. A readme with:   Your thoughts about the code. What makes it amazing code. Or what makes it ok code. Or what makes it terrible code. How would you have done it. Thoughts on formatting, structure, logic.. The more details that you can provide about the code (what's terrible about it or/and what is good about it) the easier for us to assess your coding style, mentality etc
+Controller and Reposiroty name is not semantic
+it should be JobController and JobRepository
 
-And 
+More details should be added on comments
 
-Y.  Refactor it if you feel it needs refactoring. The more love you put into it. The easier for us to asses your thoughts, code principles etc
-
-
-IMPORTANT: Make two commits. First commit with original code. Second with your refactor so we can easily trace changes. 
-
-
-NB: you do not need to set up the code on local and make the web app run. It will not run as its not a complete web app. This is purely to assess you thoughts about code, formatting, logic etc
+Localization should be added if app support multi language or in fututre it may be needed.
 
 
-===== So expected output is a GitHub link with either =====
-
-1. Readme described above (point X above) + refactored code 
-OR
-2. Readme described above (point X above) + a unit test of the code that we have sent
-
-Thank you!
 
 
